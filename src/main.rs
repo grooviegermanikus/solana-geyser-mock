@@ -35,28 +35,30 @@ async fn main() {
 
     // TODO adopt validator code
 
-    let owner_pubkey = Pubkey::new_unique();
-    let account_pubkey = Pubkey::new_unique();
 
-    let v3 = ReplicaAccountInfoV3 {
-        pubkey: account_pubkey.as_ref(),
-        lamports: 3333,
-        owner: owner_pubkey.as_ref(),
-        executable: false,
-        rent_epoch: 0,
-        data: &[23,12,12,12],
-        write_version: 999999,
-        txn: None,
-    };
-
-    let account = ReplicaAccountInfoVersions::V0_0_3(&v3);
-
-    let slot = 990000000 as Slot;
-    plugin.update_account(account, slot, false).unwrap()
 
     std::thread::spawn(move || {
         loop {
 
+            let owner_pubkey = Pubkey::new_unique();
+            let account_pubkey = Pubkey::new_unique();
+
+            let v3 = ReplicaAccountInfoV3 {
+                pubkey: account_pubkey.as_ref(),
+                lamports: 3333,
+                owner: owner_pubkey.as_ref(),
+                executable: false,
+                rent_epoch: 0,
+                data: &[23,12,12,12],
+                write_version: 999999,
+                txn: None,
+            };
+
+
+
+            let slot = 990000000 as Slot;
+            let account = ReplicaAccountInfoVersions::V0_0_3(&v3);
+            plugin.update_account(account, slot, false).unwrap();
 
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
