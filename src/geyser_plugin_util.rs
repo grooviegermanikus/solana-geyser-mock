@@ -1,14 +1,51 @@
-use agave_geyser_plugin_interface::geyser_plugin_interface::{GeyserPlugin, ReplicaAccountInfoV3};
+use agave_geyser_plugin_interface::geyser_plugin_interface::{GeyserPlugin, GeyserPluginError, ReplicaAccountInfoV3};
 use libloading::Library;
 use solana_geyser_plugin_manager::geyser_plugin_manager::{
     GeyserPluginManagerError, LoadedGeyserPlugin,
 };
 use std::path::Path;
+use std::sync::Arc;
+use log::info;
 use solana_program::pubkey::Pubkey;
 use solana_sdk::account::{AccountSharedData, ReadableAccount};
 use solana_sdk::transaction::SanitizedTransaction;
 
-pub fn load_plugin_from_config(
+
+// see also GeyserPluginManager: load_plugin
+
+pub fn setup_plugin(config_file: &Path) -> Result<Arc<LoadedGeyserPlugin>, GeyserPluginError> {
+
+    let (mut new_plugin, new_lib, new_config_file) = load_plugin_from_config(config_file)
+        .unwrap();
+
+    setup_logger_for_plugin( new_plugin.as_ref())?;
+
+
+    // Attempt to on_load with new plugin
+    match new_plugin.on_load(config_file.as_os_str().to_str().unwrap(), true) {
+        // On success, push plugin and library
+        Ok(()) => {
+            info!("Successfully loaded plugin: {}", new_plugin.name());
+            // self.plugins.push(new_plugin);
+            // self.libs.push(new_lib);
+        }
+
+        // On failure, return error
+        Err(err) => {
+            // return Err(jsonrpc_core::error::Error {
+            //     code: ErrorCode::InvalidRequest,
+            //     message: format!(
+            //         "Failed to start new plugin (previous plugin was dropped!): {err}"
+            //     ),
+            //     data: None,
+            // });
+        }
+    }
+
+    Ok(Arc::new(new_plugin))
+}
+
+fn load_plugin_from_config(
     geyser_plugin_config_file: &Path,
 ) -> Result<(LoadedGeyserPlugin, Library, &str), GeyserPluginManagerError> {
     use std::{fs::File, io::Read, path::PathBuf};
@@ -92,4 +129,9 @@ fn accountinfo_from_shared_account_data<'a>(
         write_version,
         txn: *txn,
     }
+}
+
+fn setup_logger_for_plugin(new_plugin: &dyn GeyserPlugin) -> Result<(), GeyserPluginError> {
+    new_plugin
+        .setup_logger(log::logger(), log::max_level())
 }

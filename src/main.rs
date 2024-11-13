@@ -1,4 +1,4 @@
-use crate::geyser_plugin_util::load_plugin_from_config;
+use crate::geyser_plugin_util::{setup_plugin};
 use std::path::Path;
 use agave_geyser_plugin_interface::geyser_plugin_interface::{ReplicaAccountInfoV3, ReplicaAccountInfoVersions};
 use clap::Parser;
@@ -30,8 +30,9 @@ async fn main() {
     let config_file = Path::new(&args.geyser_plugin_config);
     assert!(config_file.exists(), "Config file must exist");
 
-    let (mut plugin, new_lib, new_config_file) = load_plugin_from_config(config_file)
+    let plugin = setup_plugin(config_file.as_ref())
     .unwrap();
+
 
     // TODO adopt validator code
 
