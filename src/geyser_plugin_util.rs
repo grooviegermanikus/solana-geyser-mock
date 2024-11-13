@@ -6,10 +6,21 @@ use solana_geyser_plugin_manager::geyser_plugin_manager::{
 use std::path::Path;
 use std::sync::Arc;
 use log::info;
+use solana_program::clock::Epoch;
 use solana_program::pubkey::Pubkey;
 use solana_sdk::account::{AccountSharedData, ReadableAccount};
 use solana_sdk::transaction::SanitizedTransaction;
 
+
+#[derive(Debug)]
+pub struct MockAccount {
+    pub pubkey: Pubkey,
+    pub lamports: u64,
+    pub data: Vec<u8>,
+    pub owner: Pubkey,
+    pub executable: bool,
+    pub rent_epoch: Epoch,
+}
 
 // see also GeyserPluginManager: load_plugin
 
@@ -113,7 +124,7 @@ fn load_plugin_from_config(
     ))
 }
 
-fn accountinfo_from_shared_account_data<'a>(
+pub fn accountinfo_from_shared_account_data<'a>(
     account: &'a AccountSharedData,
     txn: &'a Option<&'a SanitizedTransaction>,
     pubkey: &'a Pubkey,

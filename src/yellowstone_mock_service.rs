@@ -3,137 +3,23 @@ use rand::distributions::Standard;
 use rand::{random, thread_rng, Rng, RngCore};
 use solana_sdk::clock::UnixTimestamp;
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::recent_blockhashes_account::update_account;
+// use solana_sdk::recent_blockhashes_account::update_account;
 use std::ops::Add;
 use std::path::Path;
 use std::thread::{sleep, spawn};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use agave_geyser_plugin_interface::geyser_plugin_interface::ReplicaAccountInfoV3;
 use libloading::Library;
 use log::{debug, info};
-use solana_geyser_plugin_interface::geyser_plugin_interface::GeyserPlugin;
-use agave_geyser_plugin_manager::geyser_plugin_manager::{GeyserPluginManager, GeyserPluginManagerError, LoadedGeyserPlugin};
+use solana_sdk::account::{Account, AccountSharedData};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
-use yellowstone_grpc_geyser::config::{ConfigBlockFailAction, ConfigGrpc, ConfigGrpcFilters};
-use yellowstone_grpc_geyser::grpc::{
-    GrpcService, Message, MessageAccount, MessageAccountInfo, MessageBlockMeta, MessageSlot,
-};
-use yellowstone_grpc_proto::geyser::CommitmentLevel;
+use crate::geyser_plugin_util::MockAccount;
 
-
-#[tokio::main]
-async fn main() {
-    // let mut geyser_plugin_manager = GeyserPluginManager::new();
-
-    let (mut plugin, new_lib, new_config_file) = load_plugin_from_config(Path::new("/Users/stefan/mango/projects/geyser-misc/config.json")).unwrap();
-
-
-
-}
-
-// c&p from 2.0.15
-pub(crate) fn load_plugin_from_config(
-    geyser_plugin_config_file: &Path,
-) -> Result<(LoadedGeyserPlugin, Library, &str), GeyserPluginManagerError> {
-    use std::{fs::File, io::Read, path::PathBuf};
-    type PluginConstructor = unsafe fn() -> *mut dyn GeyserPlugin;
-    use libloading::Symbol;
-
-    let mut file = match File::open(geyser_plugin_config_file) {
-        Ok(file) => file,
-        Err(err) => {
-            return Err(GeyserPluginManagerError::CannotOpenConfigFile(format!(
-                "Failed to open the plugin config file {geyser_plugin_config_file:?}, error: {err:?}"
-            )));
-        }
-    };
-
-    let mut contents = String::new();
-    if let Err(err) = file.read_to_string(&mut contents) {
-        return Err(GeyserPluginManagerError::CannotReadConfigFile(format!(
-            "Failed to read the plugin config file {geyser_plugin_config_file:?}, error: {err:?}"
-        )));
-    }
-
-    let result: serde_json::Value = match json5::from_str(&contents) {
-        Ok(value) => value,
-        Err(err) => {
-            return Err(GeyserPluginManagerError::InvalidConfigFileFormat(format!(
-                "The config file {geyser_plugin_config_file:?} is not in a valid Json5 format, error: {err:?}"
-            )));
-        }
-    };
-
-    let libpath = result["libpath"]
-        .as_str()
-        .ok_or(GeyserPluginManagerError::LibPathNotSet)?;
-    let mut libpath = PathBuf::from(libpath);
-    if libpath.is_relative() {
-        let config_dir = geyser_plugin_config_file.parent().ok_or_else(|| {
-            GeyserPluginManagerError::CannotOpenConfigFile(format!(
-                "Failed to resolve parent of {geyser_plugin_config_file:?}",
-            ))
-        })?;
-        libpath = config_dir.join(libpath);
-    }
-
-    let plugin_name = result["name"].as_str().map(|s| s.to_owned());
-
-    let config_file = geyser_plugin_config_file
-        .as_os_str()
-        .to_str()
-        .ok_or(GeyserPluginManagerError::InvalidPluginPath)?;
-
-    let (plugin, lib) = unsafe {
-        let lib = Library::new(libpath)
-            .map_err(|e| GeyserPluginManagerError::PluginLoadError(e.to_string()))?;
-        let constructor: Symbol<PluginConstructor> = lib
-            .get(b"_create_plugin")
-            .map_err(|e| GeyserPluginManagerError::PluginLoadError(e.to_string()))?;
-        let plugin_raw = constructor();
-        (Box::from_raw(plugin_raw), lib)
-    };
-    Ok((
-        LoadedGeyserPlugin::new(plugin, plugin_name),
-        lib,
-        config_file,
-    ))
-}
-
-
-#[tokio::main]
-async fn main__() {
-    tracing_subscriber::fmt::init();
-    info!("starting mock service");
-
-    let config_grpc = ConfigGrpc {
-        address: "127.0.0.1:50001".parse().unwrap(),
-        tls_config: None,
-        max_decoding_message_size: 4_000_000,
-        snapshot_plugin_channel_capacity: None,
-        snapshot_client_channel_capacity: 50_000_000,
-        channel_capacity: 100_000,
-        unary_concurrency_limit: 20,
-        unary_disabled: false,
-        filters: ConfigGrpcFilters::default(),
-    };
-
-    let (_snapshot_channel, grpc_channel, _grpc_shutdown) =
-        GrpcService::create(config_grpc, ConfigBlockFailAction::Panic)
-            .await
-            .unwrap();
-
-    tokio::spawn(mainnet_traffic(grpc_channel));
-
-    loop {
-        debug!("MOCK STILL RUNNING");
-        sleep(Duration::from_millis(1000));
-    }
-}
 
 // - 20-80 MiB per Slot
 // 4000 updates per Slot
-async fn mainnet_traffic(grpc_channel: UnboundedSender<Message>) {
+pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>) {
     let owner = Pubkey::new_unique();
     let account_pubkeys: Vec<Pubkey> = (0..100).map(|_| Pubkey::new_unique()).collect();
 
@@ -189,28 +75,58 @@ async fn mainnet_traffic(grpc_channel: UnboundedSender<Message>) {
 
             let account_pubkey = account_pubkeys[i % sizes.len()];
 
-            let update_account = MessageAccount {
-                account: MessageAccountInfo {
-                    pubkey: account_pubkey,
-                    lamports: 0,
-                    owner,
-                    executable: false,
-                    rent_epoch: 0,
-                    data,
-                    write_version: 4321,
-                    txn_signature: None,
-                },
-                slot,
-                is_startup: false,
+            // let ua = Account {
+            //     lamports: 0,
+            //     data,
+            //     owner,
+            //     executable: false,
+            //     rent_epoch: 0,
+            // };
+
+            let account = MockAccount {
+                pubkey: account_pubkey,
+                lamports: 0,
+                data,
+                owner,
+                executable: false,
+                rent_epoch: 0,
             };
 
-            let elapsed = account_build_started_at.elapsed();
-            // 0.25us
-            debug!("time consumed to build fake account message: {:.2}us", elapsed.as_secs_f64() * 1_000_000.0);
+            // let shared = AccountSharedData::from(ua);
+
+            // let v3 = ReplicaAccountInfoV3 {
+            //     pubkey: account_pubkey.as_ref().clone(),
+            //     lamports: 0,
+            //     owner: owner.as_ref(),
+            //     executable: false,
+            //     rent_epoch: 0,
+            //     data: data.as_ref(),
+            //     write_version: 0,
+            //     txn: None,
+            // };
+
+            // let update_account = MessageAccount {
+            //     account: MessageAccountInfo {
+            //         pubkey: account_pubkey,
+            //         lamports: 0,
+            //         owner,
+            //         executable: false,
+            //         rent_epoch: 0,
+            //         data,
+            //         write_version: 4321,
+            //         txn_signature: None,
+            //     },
+            //     slot,
+            //     is_startup: false,
+            // };
+
+            // let elapsed = account_build_started_at.elapsed();
+            // // 0.25us
+            // debug!("time consumed to build fake account message: {:.2}us", elapsed.as_secs_f64() * 1_000_000.0);
 
 
-            grpc_channel
-                .send(Message::Account(update_account))
+            geyser_channel
+                .send(account)
                 .expect("channel was closed");
 
             tokio::time::sleep_until(next_message_at).await;
@@ -221,51 +137,46 @@ async fn mainnet_traffic(grpc_channel: UnboundedSender<Message>) {
             .unwrap()
             .as_secs() as UnixTimestamp;
 
-        grpc_channel
-            .send(Message::Slot(MessageSlot {
-                slot,
-                parent: Some(slot - 1),
-                status: CommitmentLevel::Processed,
-            }))
-            .expect("channel was closed");
+        // grpc_channel
+        //     .send(Message::Slot(MessageSlot {
+        //         slot,
+        //         parent: Some(slot - 1),
+        //         status: CommitmentLevel::Processed,
+        //     }))
+        //     .expect("channel was closed");
 
-        grpc_channel
-            .send(Message::BlockMeta(MessageBlockMeta {
-                parent_slot: slot - 1,
-                slot,
-                parent_blockhash: "nohash".to_string(),
-                blockhash: "nohash".to_string(),
-                rewards: vec![],
-                block_time: Some(block_time),
-                block_height: None,
-                executed_transaction_count: 0,
-                entries_count: 0,
-            }))
-            .expect("channel was closed");
+        // geyser_channel
+        //     .send(Message::BlockMeta(MessageBlockMeta {
+        //         parent_slot: slot - 1,
+        //         slot,
+        //         parent_blockhash: "nohash".to_string(),
+        //         blockhash: "nohash".to_string(),
+        //         rewards: vec![],
+        //         block_time: Some(block_time),
+        //         block_height: None,
+        //         executed_transaction_count: 0,
+        //         entries_count: 0,
+        //     }))
+        //     .expect("channel was closed");
 
         tokio::time::sleep_until(slot_started_at.add(Duration::from_millis(400))).await;
     }
 }
 
-async fn helloworld_traffic(grpc_channel: UnboundedSender<Message>) {
+pub async fn helloworld_traffic(grpc_channel: UnboundedSender<MockAccount>) {
     loop {
-        let update_account = MessageAccount {
-            account: MessageAccountInfo {
-                pubkey: Default::default(),
+        let account_mock = MockAccount {
+                pubkey: Pubkey::new_unique(),
                 lamports: 0,
-                owner: Default::default(),
+                owner: Pubkey::new_unique(),
                 executable: false,
                 rent_epoch: 0,
                 data: vec![1, 2, 3],
-                write_version: 0,
-                txn_signature: None,
-            },
-            slot: 999_999,
-            is_startup: false,
-        };
+            };
+
 
         grpc_channel
-            .send(Message::Account(update_account))
+            .send(account_mock)
             .expect("send");
         println!("sent account update down the stream");
 

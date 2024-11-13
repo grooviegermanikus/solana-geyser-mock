@@ -45,6 +45,7 @@ solana-geyser-plugin-manager = "~2.0.15"
 agave-geyser-plugin-interface = "~2.0.15"
 
 libloading = "0.7.4"
+rand = "0.7.3"
 
 
 #agave-account-decoder = "=1.17.28"
