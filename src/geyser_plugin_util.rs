@@ -1,9 +1,12 @@
-use agave_geyser_plugin_interface::geyser_plugin_interface::GeyserPlugin;
+use agave_geyser_plugin_interface::geyser_plugin_interface::{GeyserPlugin, ReplicaAccountInfoV3};
 use libloading::Library;
 use solana_geyser_plugin_manager::geyser_plugin_manager::{
     GeyserPluginManagerError, LoadedGeyserPlugin,
 };
 use std::path::Path;
+use solana_program::pubkey::Pubkey;
+use solana_sdk::account::{AccountSharedData, ReadableAccount};
+use solana_sdk::transaction::SanitizedTransaction;
 
 pub fn load_plugin_from_config(
     geyser_plugin_config_file: &Path,
@@ -71,4 +74,22 @@ pub fn load_plugin_from_config(
         lib,
         config_file,
     ))
+}
+
+fn accountinfo_from_shared_account_data<'a>(
+    account: &'a AccountSharedData,
+    txn: &'a Option<&'a SanitizedTransaction>,
+    pubkey: &'a Pubkey,
+    write_version: u64,
+) -> ReplicaAccountInfoV3<'a> {
+    ReplicaAccountInfoV3 {
+        pubkey: pubkey.as_ref(),
+        lamports: account.lamports(),
+        owner: account.owner().as_ref(),
+        executable: account.executable(),
+        rent_epoch: account.rent_epoch(),
+        data: account.data(),
+        write_version,
+        txn: *txn,
+    }
 }
