@@ -10,6 +10,7 @@ use tracing_subscriber::EnvFilter;
 
 mod geyser_plugin_util;
 mod yellowstone_mock_service;
+mod debouncer_instant;
 
 
 #[derive(Parser, Debug)]
@@ -45,10 +46,18 @@ async fn main() {
 
 
     std::thread::spawn(move || {
+
+        let debouncer = debouncer_instant::Debouncer::new(std::time::Duration::from_millis(10));
+
         'recv_loop: loop {
             match channel_rx.blocking_recv() {
                 Some(mock_account) => {
-                    info!("channel_rx.blocking_recv() returned {:?}", mock_account);
+
+                    // usually there are some 10-50 messages in the channel
+                    if channel_rx.len() > 100 &&  debouncer.can_fire() {
+                        info!("channel_rx.blocking_recv() returned {:?} ({} remaining)", mock_account.pubkey, channel_rx.len());
+                    }
+
                     let slot = 999999;
 
                     // let v3 = accountinfo_from_shared_account_data(&account, &None, account_pubkey, 0);
@@ -75,9 +84,6 @@ async fn main() {
                 }
             }
 
-
-
-            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }).join().unwrap();
 }
