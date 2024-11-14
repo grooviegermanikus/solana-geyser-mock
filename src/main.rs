@@ -55,13 +55,11 @@ async fn main() {
 
                     // usually there are some 10-50 messages in the channel
                     if channel_rx.len() > 100 &&  debouncer.can_fire() {
-                        info!("channel_rx.blocking_recv() returned {:?} ({} remaining)", mock_account.pubkey, channel_rx.len());
+                        info!("sending account {:?} with data_len={} ({} remaining)",
+                            mock_account.pubkey, mock_account.data.len(), channel_rx.len());
                     }
 
                     let slot = 999999;
-
-                    // let v3 = accountinfo_from_shared_account_data(&account, &None, account_pubkey, 0);
-
 
                     let account_v3 = ReplicaAccountInfoV3 {
                         pubkey: mock_account.pubkey.as_ref(),
