@@ -19,6 +19,9 @@ pub struct Args {
     // point to config.json
     #[arg(long)]
     pub geyser_plugin_config: String,
+    #[arg(long, default_value = "30000000")]
+    pub account_bytes_per_slot: u64,
+
 }
 
 #[tokio::main]
@@ -42,7 +45,7 @@ async fn main() {
     let (channel_tx, mut channel_rx) = tokio::sync::mpsc::unbounded_channel();
 
     // tokio::task::spawn(yellowstone_mock_service::helloworld_traffic(channel_tx));
-    tokio::task::spawn(yellowstone_mock_service::mainnet_traffic(channel_tx));
+    tokio::task::spawn(yellowstone_mock_service::mainnet_traffic(channel_tx, args.account_bytes_per_slot));
 
 
     std::thread::spawn(move || {

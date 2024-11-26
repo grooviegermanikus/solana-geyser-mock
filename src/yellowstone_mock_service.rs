@@ -19,7 +19,8 @@ use crate::geyser_plugin_util::MockAccount;
 
 // - 20-80 MiB per Slot
 // 4000 updates per Slot
-pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>) {
+pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes_per_slot: u64) {
+    info!("Setup mainnet-like traffic source with {} bytes per slot", bytes_per_slot);
     let owner = Pubkey::new_unique();
     let account_pubkeys: Vec<Pubkey> = (0..100).map(|_| Pubkey::new_unique()).collect();
 
@@ -35,15 +36,14 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>) {
         // 10MB -> stream buffer size peaks at 30
         // 30MB -> stream buffer size peaks at 10000th and more
         // per slot
-        const TARGET_BYTES_TOTAL: usize = 30_000_000;
         let mut bytes_total = 0;
 
-        let mut requested_sizes: Vec<usize> = Vec::new();
+        let mut requested_sizes: Vec<u64> = Vec::new();
 
         for i in 0..99_999_999 {
             let data_size = sizes[i % sizes.len()];
 
-            if bytes_total + data_size > TARGET_BYTES_TOTAL {
+            if bytes_total + data_size > bytes_per_slot {
                 break;
             }
 
@@ -66,7 +66,7 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>) {
 
 
             let account_build_started_at = Instant::now();
-            let mut data = vec![0; data_bytes];
+            let mut data = vec![0; data_bytes as usize];
             fill_with_xor_prng(&mut data);
             let data = data.to_vec();
 
