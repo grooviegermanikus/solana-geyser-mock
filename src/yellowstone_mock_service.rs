@@ -83,9 +83,14 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>) {
             //     rent_epoch: 0,
             // };
 
+            let epoch_us = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros() as u64;
+
             let account = MockAccount {
                 pubkey: account_pubkey,
-                lamports: 0,
+                lamports: epoch_us,
                 data,
                 owner,
                 executable: false,
