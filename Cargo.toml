@@ -47,6 +47,8 @@ agave-geyser-plugin-interface = "~2.0.15"
 libloading = "0.7.4"
 rand = "0.7.3"
 
+[dev-dependencies]
+lz4_flex = "0.11.3"
 
 #agave-account-decoder = "=1.17.28"
 #agave-geyser-plugin-interface = "=1.17.28"

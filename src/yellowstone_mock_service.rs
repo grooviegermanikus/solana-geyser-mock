@@ -16,11 +16,10 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::Instant;
 use crate::geyser_plugin_util::MockAccount;
 
-
 // - 20-80 MiB per Slot
 // 4000 updates per Slot
-pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes_per_slot: u64) {
-    info!("Setup mainnet-like traffic source with {} bytes per slot", bytes_per_slot);
+pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes_per_slot: u64, compressibility: f64) {
+    info!("Setup mainnet-like traffic source with {} bytes per slot and compressibility {}", bytes_per_slot, compressibility);
     let owner = Pubkey::new_unique();
     let account_pubkeys: Vec<Pubkey> = (0..100).map(|_| Pubkey::new_unique()).collect();
 
@@ -65,10 +64,11 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes
             let next_message_at =
                 slot_started_at.add(Duration::from_secs_f64(avg_delay * i as f64));
 
-
             let account_build_started_at = Instant::now();
             let mut data = vec![0; data_bytes as usize];
-            fill_with_xor_prng(&mut data);
+            let entropy_bytes = (data_bytes as f64 * (1.0 - compressibility)) as usize;
+            assert!(entropy_bytes <= data_bytes as usize, "entropy_bytes overflow");
+            fill_with_xor_prng(&mut data[0..entropy_bytes]);
             let data = data.to_vec();
 
             // using random slows down everything - could be the generator PRNG or the entropy preventing compression
@@ -204,5 +204,26 @@ fn fill_with_xor_prng(binary: &mut [u8]) {
         binary[i_word * 4 + 1] = (x >> 8) as u8;
         binary[i_word * 4 + 2] = (x >> 16) as u8;
         binary[i_word * 4 + 3] = (x >> 24) as u8;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fill_with_xor_prng_test() {
+        let mut data_full_entropy = vec![0; 1000];
+        fill_with_xor_prng(&mut data_full_entropy);
+        let compressed_size = lz4_flex::compress(&data_full_entropy).len();
+        assert_eq!(compressed_size, 1005);
+    }
+
+    #[test]
+    fn fill_with_xor_prng_lowentropy_test() {
+        let mut data_low_entropy = vec![0; 1000];
+        fill_with_xor_prng(&mut data_low_entropy[0..200]);
+        let compressed_size = lz4_flex::compress(&data_low_entropy).len();
+        assert_eq!(compressed_size, 219);
     }
 }

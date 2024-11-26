@@ -21,7 +21,8 @@ pub struct Args {
     pub geyser_plugin_config: String,
     #[arg(long, default_value = "30000000")]
     pub account_bytes_per_slot: u64,
-
+    #[arg(long, default_value = "0.0")]
+    pub compressibility: f64,
 }
 
 #[tokio::main]
@@ -32,6 +33,8 @@ async fn main() {
 
     let args = Args::parse();
 
+    assert!(args.compressibility >= 0.0 && args.compressibility <= 1.0, "compressibility must be in [0.0, 1.0]");
+
     info!("Loading geyser plugin from config: {}", args.geyser_plugin_config);
     let config_file = Path::new(&args.geyser_plugin_config);
     assert!(config_file.exists(), "Config file must exist");
@@ -39,13 +42,16 @@ async fn main() {
     let plugin = setup_plugin(config_file.as_ref())
     .unwrap();
 
-
     // TODO adopt validator code
 
     let (channel_tx, mut channel_rx) = tokio::sync::mpsc::unbounded_channel();
 
     // tokio::task::spawn(yellowstone_mock_service::helloworld_traffic(channel_tx));
-    tokio::task::spawn(yellowstone_mock_service::mainnet_traffic(channel_tx, args.account_bytes_per_slot));
+    tokio::task::spawn(
+        yellowstone_mock_service::mainnet_traffic(
+            channel_tx,
+            args.account_bytes_per_slot,
+            args.compressibility));
 
 
     std::thread::spawn(move || {
