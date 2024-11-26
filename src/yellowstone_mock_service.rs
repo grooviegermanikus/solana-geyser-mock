@@ -50,7 +50,7 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes
             bytes_total += data_size;
         }
 
-        println!(
+        debug!(
             "will send account updates for slot {} down the stream ({} bytes) in {} messages",
             slot,
             bytes_total,
@@ -186,7 +186,7 @@ pub async fn helloworld_traffic(grpc_channel: UnboundedSender<MockAccount>) {
         grpc_channel
             .send(account_mock)
             .expect("send");
-        println!("sent account update down the stream");
+        debug!("sent account update down the stream");
 
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
