@@ -58,6 +58,7 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes
             requested_sizes.len()
         );
 
+        // distribute data over the slot duration (400ms) but leave some space
         let avg_delay = 0.350 / requested_sizes.len() as f64;
 
         for (i, data_bytes) in requested_sizes.into_iter().enumerate() {
