@@ -1,9 +1,10 @@
+use std::ops::Sub;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Debouncer {
-    started_at: Instant,
+    base: Instant,
     cooldown_ms: i64,
     last: AtomicI64,
 }
@@ -11,13 +12,14 @@ pub struct Debouncer {
 impl Debouncer {
     pub fn new(cooldown: Duration) -> Self {
         Self {
-            started_at: Instant::now(),
+            // need some reference in the past
+            base: Instant::now() - Duration::from_secs(100_000),
             cooldown_ms: cooldown.as_millis() as i64,
             last: AtomicI64::new(0),
         }
     }
     pub fn can_fire(&self) -> bool {
-        let passed_total_ms = self.started_at.elapsed().as_millis() as i64;
+        let passed_total_ms = (Instant::now() - self.base).as_millis() as i64;
 
         let results = self
             .last
@@ -35,7 +37,7 @@ impl Debouncer {
 
 #[cfg(test)]
 mod tests {
-    use crate::debouncer_system::Debouncer;
+    use crate::debouncer_instant::Debouncer;
     use std::sync::Arc;
     use std::thread;
     use std::thread::sleep;
