@@ -90,6 +90,7 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes
                 .as_micros() as u64;
 
             let account = MockAccount {
+                slot,
                 pubkey: account_pubkey,
                 lamports: epoch_us,
                 data,
@@ -172,6 +173,7 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes
 pub async fn helloworld_traffic(grpc_channel: UnboundedSender<MockAccount>) {
     loop {
         let account_mock = MockAccount {
+                slot: 999_888,
                 pubkey: Pubkey::new_unique(),
                 lamports: 0,
                 owner: Pubkey::new_unique(),

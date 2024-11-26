@@ -6,7 +6,7 @@ use solana_geyser_plugin_manager::geyser_plugin_manager::{
 use std::path::Path;
 use std::sync::Arc;
 use log::info;
-use solana_program::clock::Epoch;
+use solana_program::clock::{Epoch, Slot};
 use solana_program::pubkey::Pubkey;
 use solana_sdk::account::{AccountSharedData, ReadableAccount};
 use solana_sdk::transaction::SanitizedTransaction;
@@ -14,6 +14,7 @@ use solana_sdk::transaction::SanitizedTransaction;
 
 #[derive(Debug)]
 pub struct MockAccount {
+    pub slot: Slot,
     pub pubkey: Pubkey,
     pub lamports: u64,
     pub data: Vec<u8>,

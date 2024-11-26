@@ -68,8 +68,6 @@ async fn main() {
                             mock_account.pubkey, mock_account.data.len(), channel_rx.len());
                     }
 
-                    let slot = 999999;
-
                     let account_v3 = ReplicaAccountInfoV3 {
                         pubkey: mock_account.pubkey.as_ref(),
                         lamports: mock_account.lamports,
@@ -82,7 +80,7 @@ async fn main() {
                     };
 
                     let account = ReplicaAccountInfoVersions::V0_0_3(&account_v3);
-                    plugin.update_account(account, slot, false).unwrap();
+                    plugin.update_account(account, mock_account.slot, false).unwrap();
 
                 }
                 None => {
