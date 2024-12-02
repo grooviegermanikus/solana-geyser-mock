@@ -10,18 +10,23 @@ use std::thread::{sleep, spawn};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use agave_geyser_plugin_interface::geyser_plugin_interface::ReplicaAccountInfoV3;
 use libloading::Library;
-use log::{debug, info};
+use log::{debug, error, info, warn};
 use solana_sdk::account::{Account, AccountSharedData};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{Sender, UnboundedSender};
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::time::Instant;
+use crate::debouncer_instant;
 use crate::geyser_plugin_util::MockAccount;
 
 // - 20-80 MiB per Slot
 // 4000 updates per Slot
-pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes_per_slot: u64, compressibility: f64) {
+pub async fn mainnet_traffic(geyser_channel: Sender<MockAccount>, bytes_per_slot: u64, compressibility: f64) {
     info!("Setup mainnet-like traffic source with {} bytes per slot and compressibility {}", bytes_per_slot, compressibility);
     let owner = Pubkey::new_unique();
     let account_pubkeys: Vec<Pubkey> = (0..100).map(|_| Pubkey::new_unique()).collect();
+
+    let mut dropped_total = 0;
+    let debouncer = debouncer_instant::Debouncer::new(std::time::Duration::from_millis(10));
 
     for slot in 42_000_000.. {
         let slot_started_at = Instant::now();
@@ -132,9 +137,22 @@ pub async fn mainnet_traffic(geyser_channel: UnboundedSender<MockAccount>, bytes
             // debug!("time consumed to build fake account message: {:.2}us", elapsed.as_secs_f64() * 1_000_000.0);
 
 
-            geyser_channel
-                .send(account)
-                .expect("channel was closed");
+            let sent_result = geyser_channel
+                .try_send(account);
+
+            match sent_result {
+                Ok(_) => {}
+                Err(TrySendError::Full(_)) => {
+                    dropped_total += 1;
+                    if debouncer.can_fire() {
+                        warn!("channel is full (total drops: {}) - dropping message", dropped_total);
+                    }
+                }
+                Err(TrySendError::Closed(_)) => {
+                    error!("channel was closed - shutting down");
+                    return;
+                }
+            }
 
             tokio::time::sleep_until(next_message_at).await;
         }

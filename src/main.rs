@@ -1,4 +1,4 @@
-use crate::geyser_plugin_util::{accountinfo_from_shared_account_data, setup_plugin};
+use crate::geyser_plugin_util::{accountinfo_from_shared_account_data, MockAccount, setup_plugin};
 use std::path::Path;
 use agave_geyser_plugin_interface::geyser_plugin_interface::{ReplicaAccountInfoV3, ReplicaAccountInfoVersions};
 use clap::Parser;
@@ -9,7 +9,7 @@ use solana_sdk::clock::Slot;
 use tracing_subscriber::EnvFilter;
 
 mod geyser_plugin_util;
-mod yellowstone_mock_service;
+mod mock_service;
 mod debouncer_instant;
 
 
@@ -42,13 +42,14 @@ async fn main() {
     let plugin = setup_plugin(config_file.as_ref())
     .unwrap();
 
-    // TODO adopt validator code
 
-    let (channel_tx, mut channel_rx) = tokio::sync::mpsc::unbounded_channel();
+    // note: if this channel fills it the process will very likely die with OOM at some point!
+    // let (channel_tx, mut channel_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (channel_tx, mut channel_rx) = tokio::sync::mpsc::channel::<MockAccount>(102400);
 
     // tokio::task::spawn(yellowstone_mock_service::helloworld_traffic(channel_tx));
     tokio::task::spawn(
-        yellowstone_mock_service::mainnet_traffic(
+        mock_service::mainnet_traffic(
             channel_tx,
             args.account_bytes_per_slot,
             args.compressibility));
