@@ -25,6 +25,9 @@ pub struct Args {
     pub compressibility: f64,
 }
 
+// note: if this channel fills the process will very likely die with OOM at some point!
+const MOCK_BUFFER: usize = 102400;
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -43,9 +46,7 @@ async fn main() {
     .unwrap();
 
 
-    // note: if this channel fills it the process will very likely die with OOM at some point!
-    // let (channel_tx, mut channel_rx) = tokio::sync::mpsc::unbounded_channel();
-    let (channel_tx, mut channel_rx) = tokio::sync::mpsc::channel::<MockAccount>(102400);
+    let (channel_tx, mut channel_rx) = tokio::sync::mpsc::channel::<MockAccount>(MOCK_BUFFER);
 
     // tokio::task::spawn(yellowstone_mock_service::helloworld_traffic(channel_tx));
     tokio::task::spawn(
