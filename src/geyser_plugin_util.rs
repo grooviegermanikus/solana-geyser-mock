@@ -1,4 +1,4 @@
-use agave_geyser_plugin_interface::geyser_plugin_interface::{GeyserPlugin, GeyserPluginError, ReplicaAccountInfoV3};
+use agave_geyser_plugin_interface::geyser_plugin_interface::{GeyserPlugin, GeyserPluginError, ReplicaAccountInfoV3, SlotStatus};
 use libloading::Library;
 use solana_geyser_plugin_manager::geyser_plugin_manager::{
     GeyserPluginManagerError, LoadedGeyserPlugin,
@@ -9,7 +9,21 @@ use log::info;
 use solana_program::clock::{Epoch, Slot};
 use solana_program::pubkey::Pubkey;
 use solana_sdk::account::{AccountSharedData, ReadableAccount};
+use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::transaction::SanitizedTransaction;
+
+
+#[derive(Debug)]
+pub enum MockMessage {
+    Slot(MockSlot),
+    Account(MockAccount),
+}
+
+#[derive(Debug)]
+pub struct MockSlot {
+    pub slot: Slot,
+    pub commitment_level: CommitmentLevel,
+}
 
 
 #[derive(Debug)]
@@ -147,3 +161,13 @@ fn setup_logger_for_plugin(new_plugin: &dyn GeyserPlugin) -> Result<(), GeyserPl
     new_plugin
         .setup_logger(log::logger(), log::max_level())
 }
+
+
+pub fn slot_status_from_commitment_level(level: CommitmentLevel) -> SlotStatus {
+    match level {
+        CommitmentLevel::Processed => SlotStatus::Processed,
+        CommitmentLevel::Confirmed => SlotStatus::Confirmed,
+        CommitmentLevel::Finalized => SlotStatus::Rooted,
+    }
+}
+

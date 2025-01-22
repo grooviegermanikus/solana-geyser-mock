@@ -11,16 +11,18 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use agave_geyser_plugin_interface::geyser_plugin_interface::ReplicaAccountInfoV3;
 use libloading::Library;
 use log::{debug, error, info, warn};
+use solana_program::clock::Slot;
 use solana_sdk::account::{Account, AccountSharedData};
+use solana_sdk::commitment_config::CommitmentLevel::{Confirmed, Finalized, Processed};
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::time::Instant;
 use crate::debouncer_instant;
-use crate::geyser_plugin_util::MockAccount;
+use crate::geyser_plugin_util::{MockAccount, MockMessage, MockSlot};
 
 // - 20-80 MiB per Slot
 // 4000 updates per Slot
-pub async fn mainnet_traffic(geyser_channel: Sender<MockAccount>, bytes_per_slot: u64, compressibility: f64) {
+pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot: u64, compressibility: f64) {
     info!("Setup mainnet-like traffic source with {} bytes per slot and compressibility {}", bytes_per_slot, compressibility);
     let owner = Pubkey::new_unique();
     let account_pubkeys: Vec<Pubkey> = (0..100).map(|_| Pubkey::new_unique()).collect();
@@ -42,6 +44,7 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockAccount>, bytes_per_slot
         // per slot
         let mut bytes_total = 0;
 
+        let mut last_processed: Option<Slot> = None;
         let mut requested_sizes: Vec<u64> = Vec::new();
 
         for i in 0..99_999_999 {
@@ -138,7 +141,7 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockAccount>, bytes_per_slot
 
 
             let sent_result = geyser_channel
-                .try_send(account);
+                .try_send(MockMessage::Account(account));
 
             match sent_result {
                 Ok(_) => {}
@@ -161,6 +164,42 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockAccount>, bytes_per_slot
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as UnixTimestamp;
+
+        let mut sent_results = vec![];
+
+        let sent_result = geyser_channel
+            .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Processed }));
+        sent_results.push(sent_result);
+
+        last_processed = Some(slot);
+
+        if slot - last_processed.unwrap_or(u64::MAX) > 2 {
+            let sent_result = geyser_channel
+                .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Confirmed }));
+            sent_results.push(sent_result);
+        }
+
+        if slot - last_processed.unwrap_or(u64::MAX) > 31 {
+            let sent_result = geyser_channel
+                .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Finalized }));
+            sent_results.push(sent_result);
+        }
+
+        for sent_result in sent_results {
+            match sent_result {
+                Ok(_) => {}
+                Err(TrySendError::Full(_)) => {
+                    dropped_total += 1;
+                    if debouncer.can_fire() {
+                        warn!("channel is full (total drops: {}) - dropping message", dropped_total);
+                    }
+                }
+                Err(TrySendError::Closed(_)) => {
+                    error!("channel was closed - shutting down");
+                    return;
+                }
+            }
+        }
 
         // grpc_channel
         //     .send(Message::Slot(MessageSlot {
