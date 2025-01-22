@@ -1,17 +1,18 @@
-use agave_geyser_plugin_interface::geyser_plugin_interface::{GeyserPlugin, GeyserPluginError, ReplicaAccountInfoV3, SlotStatus};
+use agave_geyser_plugin_interface::geyser_plugin_interface::{
+    GeyserPlugin, GeyserPluginError, ReplicaAccountInfoV3, SlotStatus,
+};
 use libloading::Library;
+use log::info;
 use solana_geyser_plugin_manager::geyser_plugin_manager::{
     GeyserPluginManagerError, LoadedGeyserPlugin,
 };
-use std::path::Path;
-use std::sync::Arc;
-use log::info;
 use solana_program::clock::{Epoch, Slot};
 use solana_program::pubkey::Pubkey;
 use solana_sdk::account::{AccountSharedData, ReadableAccount};
 use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::transaction::SanitizedTransaction;
-
+use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum MockMessage {
@@ -24,7 +25,6 @@ pub struct MockSlot {
     pub slot: Slot,
     pub commitment_level: CommitmentLevel,
 }
-
 
 #[derive(Debug)]
 pub struct MockAccount {
@@ -40,12 +40,9 @@ pub struct MockAccount {
 // see also GeyserPluginManager: load_plugin
 
 pub fn setup_plugin(config_file: &Path) -> Result<Arc<LoadedGeyserPlugin>, GeyserPluginError> {
+    let (mut new_plugin, new_lib, new_config_file) = load_plugin_from_config(config_file).unwrap();
 
-    let (mut new_plugin, new_lib, new_config_file) = load_plugin_from_config(config_file)
-        .unwrap();
-
-    setup_logger_for_plugin( new_plugin.as_ref())?;
-
+    setup_logger_for_plugin(new_plugin.as_ref())?;
 
     // Attempt to on_load with new plugin
     match new_plugin.on_load(config_file.as_os_str().to_str().unwrap(), true) {
@@ -158,10 +155,8 @@ pub fn accountinfo_from_shared_account_data<'a>(
 }
 
 fn setup_logger_for_plugin(new_plugin: &dyn GeyserPlugin) -> Result<(), GeyserPluginError> {
-    new_plugin
-        .setup_logger(log::logger(), log::max_level())
+    new_plugin.setup_logger(log::logger(), log::max_level())
 }
-
 
 pub fn slot_status_from_commitment_level(level: CommitmentLevel) -> SlotStatus {
     match level {
@@ -170,4 +165,3 @@ pub fn slot_status_from_commitment_level(level: CommitmentLevel) -> SlotStatus {
         CommitmentLevel::Finalized => SlotStatus::Rooted,
     }
 }
-

@@ -4,26 +4,33 @@ use rand::{random, thread_rng, Rng, RngCore};
 use solana_sdk::clock::UnixTimestamp;
 use solana_sdk::pubkey::Pubkey;
 // use solana_sdk::recent_blockhashes_account::update_account;
-use std::ops::Add;
-use std::path::Path;
-use std::thread::{sleep, spawn};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::debouncer_instant;
+use crate::geyser_plugin_util::{MockAccount, MockMessage, MockSlot};
 use agave_geyser_plugin_interface::geyser_plugin_interface::ReplicaAccountInfoV3;
 use libloading::Library;
 use log::{debug, error, info, warn};
 use solana_program::clock::Slot;
 use solana_sdk::account::{Account, AccountSharedData};
 use solana_sdk::commitment_config::CommitmentLevel::{Confirmed, Finalized, Processed};
-use tokio::sync::mpsc::{Sender, UnboundedSender};
+use std::ops::Add;
+use std::path::Path;
+use std::thread::{sleep, spawn};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::{Sender, UnboundedSender};
 use tokio::time::Instant;
-use crate::debouncer_instant;
-use crate::geyser_plugin_util::{MockAccount, MockMessage, MockSlot};
 
 // - 20-80 MiB per Slot
 // 4000 updates per Slot
-pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot: u64, compressibility: f64) {
-    info!("Setup mainnet-like traffic source with {} bytes per slot and compressibility {}", bytes_per_slot, compressibility);
+pub async fn mainnet_traffic(
+    geyser_channel: Sender<MockMessage>,
+    bytes_per_slot: u64,
+    compressibility: f64,
+) {
+    info!(
+        "Setup mainnet-like traffic source with {} bytes per slot and compressibility {}",
+        bytes_per_slot, compressibility
+    );
     let owner = Pubkey::new_unique();
     let account_pubkeys: Vec<Pubkey> = (0..100).map(|_| Pubkey::new_unique()).collect();
 
@@ -35,7 +42,8 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
 
         let sizes = vec![
             // mainnet distribution
-            0, 8, 8, 165, 165, 165, 165, 11099, 11099, 11099, 11099, 11099, 11099,
+            0, 8, 8, 165, 165, 165, 165, 11099, 11099, 11099, 11099, 11099,
+            11099,
             // shape with a lot larger sizes
             // 200000, 220000, 230000,
         ];
@@ -74,22 +82,14 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
             let account_build_started_at = Instant::now();
             let mut data = vec![0; data_bytes as usize];
             let entropy_bytes = (data_bytes as f64 * (1.0 - compressibility)) as usize;
-            assert!(entropy_bytes <= data_bytes as usize, "entropy_bytes overflow");
+            assert!(
+                entropy_bytes <= data_bytes as usize,
+                "entropy_bytes overflow"
+            );
             fill_with_xor_prng(&mut data[0..entropy_bytes]);
             let data = data.to_vec();
 
-            // using random slows down everything - could be the generator PRNG or the entropy preventing compression
-            // let data: Vec<u8> = thread_rng().sample_iter(&Standard).take(data_bytes).collect();
-
             let account_pubkey = account_pubkeys[i % sizes.len()];
-
-            // let ua = Account {
-            //     lamports: 0,
-            //     data,
-            //     owner,
-            //     executable: false,
-            //     rent_epoch: 0,
-            // };
 
             let epoch_us = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -106,48 +106,17 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
                 rent_epoch: 0,
             };
 
-            // let shared = AccountSharedData::from(ua);
-
-            // let v3 = ReplicaAccountInfoV3 {
-            //     pubkey: account_pubkey.as_ref().clone(),
-            //     lamports: 0,
-            //     owner: owner.as_ref(),
-            //     executable: false,
-            //     rent_epoch: 0,
-            //     data: data.as_ref(),
-            //     write_version: 0,
-            //     txn: None,
-            // };
-
-            // let update_account = MessageAccount {
-            //     account: MessageAccountInfo {
-            //         pubkey: account_pubkey,
-            //         lamports: 0,
-            //         owner,
-            //         executable: false,
-            //         rent_epoch: 0,
-            //         data,
-            //         write_version: 4321,
-            //         txn_signature: None,
-            //     },
-            //     slot,
-            //     is_startup: false,
-            // };
-
-            // let elapsed = account_build_started_at.elapsed();
-            // // 0.25us
-            // debug!("time consumed to build fake account message: {:.2}us", elapsed.as_secs_f64() * 1_000_000.0);
-
-
-            let sent_result = geyser_channel
-                .try_send(MockMessage::Account(account));
+            let sent_result = geyser_channel.try_send(MockMessage::Account(account));
 
             match sent_result {
                 Ok(_) => {}
                 Err(TrySendError::Full(_)) => {
                     dropped_total += 1;
                     if debouncer.can_fire() {
-                        warn!("channel is full (total drops: {}) - dropping message", dropped_total);
+                        warn!(
+                            "channel is full (total drops: {}) - dropping message",
+                            dropped_total
+                        );
                     }
                 }
                 Err(TrySendError::Closed(_)) => {
@@ -166,21 +135,27 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
 
         let mut sent_results = vec![];
 
-        let sent_result = geyser_channel
-            .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Processed }));
+        let sent_result = geyser_channel.try_send(MockMessage::Slot(MockSlot {
+            slot,
+            commitment_level: Processed,
+        }));
         sent_results.push(sent_result);
 
         {
             let slot_confirmed = slot - 2;
-            let sent_result = geyser_channel
-                .try_send(MockMessage::Slot(MockSlot { slot: slot_confirmed, commitment_level: Confirmed }));
+            let sent_result = geyser_channel.try_send(MockMessage::Slot(MockSlot {
+                slot: slot_confirmed,
+                commitment_level: Confirmed,
+            }));
             sent_results.push(sent_result);
         }
 
         {
             let slot_finalized = slot - 32;
-            let sent_result = geyser_channel
-                .try_send(MockMessage::Slot(MockSlot { slot: slot_finalized, commitment_level: Finalized }));
+            let sent_result = geyser_channel.try_send(MockMessage::Slot(MockSlot {
+                slot: slot_finalized,
+                commitment_level: Finalized,
+            }));
             sent_results.push(sent_result);
         }
 
@@ -190,7 +165,10 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
                 Err(TrySendError::Full(_)) => {
                     dropped_total += 1;
                     if debouncer.can_fire() {
-                        warn!("channel is full (total drops: {}) - dropping message", dropped_total);
+                        warn!(
+                            "channel is full (total drops: {}) - dropping message",
+                            dropped_total
+                        );
                     }
                 }
                 Err(TrySendError::Closed(_)) => {
@@ -200,7 +178,6 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
             }
         }
 
-
         tokio::time::sleep_until(slot_started_at.add(Duration::from_millis(400))).await;
     }
 }
@@ -208,19 +185,16 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
 pub async fn helloworld_traffic(grpc_channel: UnboundedSender<MockAccount>) {
     loop {
         let account_mock = MockAccount {
-                slot: 999_888,
-                pubkey: Pubkey::new_unique(),
-                lamports: 0,
-                owner: Pubkey::new_unique(),
-                executable: false,
-                rent_epoch: 0,
-                data: vec![1, 2, 3],
-            };
+            slot: 999_888,
+            pubkey: Pubkey::new_unique(),
+            lamports: 0,
+            owner: Pubkey::new_unique(),
+            executable: false,
+            rent_epoch: 0,
+            data: vec![1, 2, 3],
+        };
 
-
-        grpc_channel
-            .send(account_mock)
-            .expect("send");
+        grpc_channel.send(account_mock).expect("send");
         debug!("sent account update down the stream");
 
         tokio::time::sleep(Duration::from_millis(100)).await;

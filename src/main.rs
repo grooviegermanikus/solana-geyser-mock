@@ -1,18 +1,25 @@
-use crate::geyser_plugin_util::{accountinfo_from_shared_account_data, MockAccount, MockMessage, setup_plugin, slot_status_from_commitment_level};
-use std::path::Path;
-use agave_geyser_plugin_interface::geyser_plugin_interface::{ReplicaAccountInfoV3, ReplicaAccountInfoVersions, ReplicaBlockInfoV3, ReplicaBlockInfoV4, SlotStatus};
+use crate::geyser_plugin_util::{
+    accountinfo_from_shared_account_data, setup_plugin, slot_status_from_commitment_level,
+    MockAccount, MockMessage,
+};
+use agave_geyser_plugin_interface::geyser_plugin_interface::{
+    ReplicaAccountInfoV3, ReplicaAccountInfoVersions, ReplicaBlockInfoV3, ReplicaBlockInfoV4,
+    ReplicaBlockInfoVersions, SlotStatus,
+};
 use clap::Parser;
 use log::{info, warn};
 use solana_program::pubkey::Pubkey;
 use solana_sdk::account::{AccountSharedData, ReadableAccount};
 use solana_sdk::clock::Slot;
+use solana_sdk::commitment_config::CommitmentLevel;
+use solana_transaction_status::RewardsAndNumPartitions;
+use std::path::Path;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 
+mod debouncer_instant;
 mod geyser_plugin_util;
 mod mock_service;
-mod debouncer_instant;
-
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -37,38 +44,43 @@ async fn main() {
 
     let args = Args::parse();
 
-    assert!(args.compressibility >= 0.0 && args.compressibility <= 1.0, "compressibility must be in [0.0, 1.0]");
+    assert!(
+        args.compressibility >= 0.0 && args.compressibility <= 1.0,
+        "compressibility must be in [0.0, 1.0]"
+    );
 
-    info!("Loading geyser plugin from config: {}", args.geyser_plugin_config);
+    info!(
+        "Loading geyser plugin from config: {}",
+        args.geyser_plugin_config
+    );
     let config_file = Path::new(&args.geyser_plugin_config);
     assert!(config_file.exists(), "Config file must exist");
 
-    let plugin = setup_plugin(config_file.as_ref())
-    .unwrap();
-
+    let plugin = setup_plugin(config_file.as_ref()).unwrap();
 
     let (channel_tx, mut channel_rx) = tokio::sync::mpsc::channel::<MockMessage>(MOCK_BUFFER);
 
     // tokio::task::spawn(yellowstone_mock_service::helloworld_traffic(channel_tx));
-    tokio::task::spawn(
-        mock_service::mainnet_traffic(
-            channel_tx,
-            args.account_bytes_per_slot,
-            args.compressibility));
-
+    tokio::task::spawn(mock_service::mainnet_traffic(
+        channel_tx,
+        args.account_bytes_per_slot,
+        args.compressibility,
+    ));
 
     std::thread::spawn(move || {
-
         let log_debouncer = debouncer_instant::Debouncer::new(std::time::Duration::from_millis(10));
 
         'recv_loop: loop {
             match channel_rx.blocking_recv() {
                 Some(MockMessage::Account(mock_account)) => {
-
                     // usually there are some 10-50 messages in the channel
                     if channel_rx.len() > 100 && log_debouncer.can_fire() {
-                        info!("sending account {:?} with data_len={} ({} messags in channel)",
-                            mock_account.pubkey, mock_account.data.len(), channel_rx.len());
+                        info!(
+                            "sending account {:?} with data_len={} ({} messags in channel)",
+                            mock_account.pubkey,
+                            mock_account.data.len(),
+                            channel_rx.len()
+                        );
                     }
 
                     let account_v3 = ReplicaAccountInfoV3 {
@@ -83,22 +95,50 @@ async fn main() {
                     };
 
                     let account = ReplicaAccountInfoVersions::V0_0_3(&account_v3);
-                    plugin.update_account(account, mock_account.slot, false).unwrap();
-
+                    plugin
+                        .update_account(account, mock_account.slot, false)
+                        .unwrap();
                 }
                 Some(MockMessage::Slot(mock_slot)) => {
-                    debug!("updating slot to {} with commitment {}", mock_slot.slot, mock_slot.commitment_level);
-                    plugin.update_slot_status(
-                        mock_slot.slot, None,
-                              slot_status_from_commitment_level(mock_slot.commitment_level)).unwrap();
+                    debug!(
+                        "updating slot to {} with commitment {}",
+                        mock_slot.slot, mock_slot.commitment_level
+                    );
+                    plugin
+                        .update_slot_status(
+                            mock_slot.slot,
+                            None,
+                            slot_status_from_commitment_level(mock_slot.commitment_level),
+                        )
+                        .unwrap();
 
+                    if mock_slot.commitment_level == CommitmentLevel::Processed {
+                        let block_meta = ReplicaBlockInfoV4 {
+                            parent_slot: mock_slot.slot - 1,
+                            slot: mock_slot.slot,
+                            parent_blockhash: "nohash",
+                            blockhash: "nohash",
+                            rewards: &RewardsAndNumPartitions {
+                                rewards: vec![],
+                                num_partitions: None,
+                            },
+                            block_time: None,
+                            block_height: None,
+                            executed_transaction_count: 0,
+                            entry_count: 0,
+                        };
+                        plugin
+                            .notify_block_metadata(ReplicaBlockInfoVersions::V0_0_4(&block_meta))
+                            .unwrap();
+                    }
                 }
                 None => {
                     warn!("channel closed - shutting down");
                     break 'recv_loop;
                 }
             }
-
         }
-    }).join().unwrap();
+    })
+    .join()
+    .unwrap();
 }
