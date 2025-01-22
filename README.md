@@ -39,3 +39,19 @@ Both test clients (yellowstone + quic) produce output similar to this:
 ```
 
 You typically want to inspect `Bytes Ttransfered` and `Average delay by accounts`.
+
+## TROUBLESHOOTING
+### Stalling after Loading geyser plugin
+
+```
+2025-01-22T09:58:34.208419Z  INFO solana_geyser_mock: Loading geyser plugin from config: /home/groovie/work/geyser-grpc-proxy/config-mock-yellowstone.json
+```
+
+Solutions:
+* set prometheus port to an unused one OR remove the "prometheus" field from the config file
+
+### Segfault
+
+Solution:
+* make sure solana version matches (roughly); can use `cargo tree` for that
+* check that rust version matches
