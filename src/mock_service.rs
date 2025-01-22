@@ -44,7 +44,6 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
         // per slot
         let mut bytes_total = 0;
 
-        let mut last_processed: Option<Slot> = None;
         let mut requested_sizes: Vec<u64> = Vec::new();
 
         for i in 0..99_999_999 {
@@ -171,17 +170,17 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
             .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Processed }));
         sent_results.push(sent_result);
 
-        last_processed = Some(slot);
-
-        if slot - last_processed.unwrap_or(u64::MAX) > 2 {
+        {
+            let slot_confirmed = slot - 2;
             let sent_result = geyser_channel
-                .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Confirmed }));
+                .try_send(MockMessage::Slot(MockSlot { slot: slot_confirmed, commitment_level: Confirmed }));
             sent_results.push(sent_result);
         }
 
-        if slot - last_processed.unwrap_or(u64::MAX) > 31 {
+        {
+            let slot_finalized = slot - 32;
             let sent_result = geyser_channel
-                .try_send(MockMessage::Slot(MockSlot { slot, commitment_level: Finalized }));
+                .try_send(MockMessage::Slot(MockSlot { slot: slot_finalized, commitment_level: Finalized }));
             sent_results.push(sent_result);
         }
 
@@ -201,27 +200,6 @@ pub async fn mainnet_traffic(geyser_channel: Sender<MockMessage>, bytes_per_slot
             }
         }
 
-        // grpc_channel
-        //     .send(Message::Slot(MessageSlot {
-        //         slot,
-        //         parent: Some(slot - 1),
-        //         status: CommitmentLevel::Processed,
-        //     }))
-        //     .expect("channel was closed");
-
-        // geyser_channel
-        //     .send(Message::BlockMeta(MessageBlockMeta {
-        //         parent_slot: slot - 1,
-        //         slot,
-        //         parent_blockhash: "nohash".to_string(),
-        //         blockhash: "nohash".to_string(),
-        //         rewards: vec![],
-        //         block_time: Some(block_time),
-        //         block_height: None,
-        //         executed_transaction_count: 0,
-        //         entries_count: 0,
-        //     }))
-        //     .expect("channel was closed");
 
         tokio::time::sleep_until(slot_started_at.add(Duration::from_millis(400))).await;
     }
