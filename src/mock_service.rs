@@ -26,6 +26,7 @@ pub async fn mainnet_traffic(
     geyser_channel: Sender<MockMessage>,
     bytes_per_slot: u64,
     compressibility: f64,
+    slot_tick_delay: f64,
 ) {
     info!(
         "Setup mainnet-like traffic source with {} bytes per slot and compressibility {}",
@@ -73,7 +74,7 @@ pub async fn mainnet_traffic(
         );
 
         // distribute data over the slot duration (400ms) but leave some space
-        let avg_delay = 0.350 / requested_sizes.len() as f64;
+        let avg_delay = slot_tick_delay/ requested_sizes.len() as f64;
 
         for (i, data_bytes) in requested_sizes.into_iter().enumerate() {
             let next_message_at =

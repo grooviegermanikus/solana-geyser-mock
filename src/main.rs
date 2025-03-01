@@ -31,6 +31,8 @@ pub struct Args {
     pub account_bytes_per_slot: u64,
     #[arg(long, default_value = "0.0")]
     pub compressibility: f64,
+    #[arg(long, default_value = "350.0")]
+    pub slot_tick_delay: f64,
 }
 
 // note: if this channel fills the process will very likely die with OOM at some point!
@@ -65,6 +67,7 @@ async fn main() {
         channel_tx,
         args.account_bytes_per_slot,
         args.compressibility,
+        args.slot_tick_delay,
     ));
 
     std::thread::spawn(move || {
