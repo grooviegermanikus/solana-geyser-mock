@@ -40,7 +40,7 @@ pub struct MockAccount {
 // see also GeyserPluginManager: load_plugin
 
 pub fn setup_plugin(config_file: &Path) -> Result<Arc<LoadedGeyserPlugin>, GeyserPluginError> {
-    let (mut new_plugin, new_lib, new_config_file) = load_plugin_from_config(config_file).unwrap();
+    let (mut new_plugin, new_config_file) = load_plugin_from_config(config_file).unwrap();
 
     setup_logger_for_plugin(new_plugin.as_ref())?;
 
@@ -70,7 +70,7 @@ pub fn setup_plugin(config_file: &Path) -> Result<Arc<LoadedGeyserPlugin>, Geyse
 
 fn load_plugin_from_config(
     geyser_plugin_config_file: &Path,
-) -> Result<(LoadedGeyserPlugin, Library, &str), GeyserPluginManagerError> {
+) -> Result<(LoadedGeyserPlugin, &str), GeyserPluginManagerError> {
     use std::{fs::File, io::Read, path::PathBuf};
     type PluginConstructor = unsafe fn() -> *mut dyn GeyserPlugin;
     use libloading::Symbol;
@@ -130,8 +130,7 @@ fn load_plugin_from_config(
         (Box::from_raw(plugin_raw), lib)
     };
     Ok((
-        LoadedGeyserPlugin::new(plugin, plugin_name),
-        lib,
+        LoadedGeyserPlugin::new(lib, plugin, plugin_name),
         config_file,
     ))
 }

@@ -111,7 +111,7 @@ async fn main() {
                         .update_slot_status(
                             mock_slot.slot,
                             None,
-                            slot_status_from_commitment_level(mock_slot.commitment_level),
+                            &slot_status_from_commitment_level(mock_slot.commitment_level),
                         )
                         .unwrap();
 
